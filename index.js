@@ -49,6 +49,16 @@ const resolvePromise = (promise2, x, resolve, reject) => {
   }
 };
 
+const isPromise = (value) => {
+  if ((typeof x === "object" && x !== null) || typeof x === "function") {
+    if (typeof value === "function") {
+      return true;
+    }
+  } else {
+    return false;
+  }
+};
+
 class Promise {
   constructor(executor) {
     this.status = PENDING; //初始promise状态
@@ -160,15 +170,83 @@ class Promise {
   }
 }
 
+//全部成功按顺序返回， 一个失败最终结果为失败
+Promise.all = function (values) {
+  return new Promise((resolve, reject) => {
+    const resArr = [];
+    let index = 0; //解决多个异步并发问题需要用到计数器
+    //保证执行结果按顺序返回
+    const processData = (key, value) => {
+      resArr[key] = value;
+      if (++index === resArr.length) {
+        resolve(resArr);
+      }
+    };
+    for (let i = 0; i < values.length; i++) {
+      const current = values[i];
+      if (isPromise(current)) {
+        current.then((data) => {
+          processData(i, data);
+        }, reject);
+      } else {
+        processData(i, current);
+      }
+    }
+  });
+};
 
-module.exports = Promise
+Promise.resolve = (value) => {
+  return new Promise((resolve, reject) => {
+    resolve(value);
+  });
+};
 
+Promise.reject = (reason) => {
+  return new Promise((resolve, reject) => {
+    reject(reason);
+  });
+};
+
+Promise.prototype.finally = function (cb) {
+  return this.then(
+    (value) => {
+      Promise.resolve(cb()).then(() => value);
+    },
+    (reason) => {
+      Promise.reject(cb()).then(() => {
+        throw reason;
+      });
+    }
+  );
+};
+//第一个有结果的作为最终结果
+Promise.race = (arr) => {
+  return new Promise((resolve, reject) => {
+    if (!(arr instanceof Array)) reject(new Error("Invalid Array"));
+    arr.forEach((item) => {
+      if (Promise.isPromise(item)) {
+        item.then(
+          (value) => {
+            resolve(value);
+          },
+          (reason) => {
+            reject(reason);
+          }
+        );
+      } else {
+        resolve(item);
+      }
+    });
+  });
+};
+
+module.exports = Promise;
 
 Promise.defer = Promise.deferred = function () {
-    let dfd = {};
-    dfd.promise = new Promise((resolve, reject) => {
-        dfd.resolve = resolve;
-        dfd.reject = reject
-    })
-    return dfd;
-}
+  let dfd = {};
+  dfd.promise = new Promise((resolve, reject) => {
+    dfd.resolve = resolve;
+    dfd.reject = reject;
+  });
+  return dfd;
+};
